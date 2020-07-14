@@ -1,1488 +1,637 @@
 // Copyrights belong to Discover Technologies LLC. © 2019 Discover Technologies LLC
 // Script Continued Below
-//----------------------------------------------------------------------
-// DocIntSharePoint v1.0.0
-// @preserve Copyright (c) Discover Technologies, LLC
-// @author Discover Technologies - Product Development
-//----------------------------------------------------------------------
+var DocIntADAL_DS = (function () {
+    var _instance = null;
 
-var DocIntSharePoint = (function () {
-    //'use strict';
-
-    /**
-     * @constructor
-     * @param {string} refSite - the root web URL of the SharePoint site
-     * @param {string} refList = the Document Library name related to the Tasker connection
-     */
-    DocIntSharePoint = function (refBase, refSite, refListPath, spVersion, refListID) {
-        this.baseUrl = refBase; //https://host
-        this.site = refSite; // '/sites/ServiceNow			
-        this.listPath = refListPath; //'lib21'
-        //this.list refer to listPath
-        this.listId = refListID;
-
-        this.sharePointVersion = spVersion; //o365, sp2013, sp2016,
+    DocIntADAL_DS = function () {
+        return DocIntADAL_DS.prototype._instance;
     };
 
-    /**
-     * builds a REST uri using the site and specified endpoint
-     * @param {any} endpooint
-     */
-    DocIntSharePoint.prototype.buildSPRestUri = function (endpoint) {
-        var url = this.baseUrl + this.site;
-        if (!url) {
-            url = "";
-        }
+    DocIntADAL_DS = function (clientId, tenant, spUri) {
+        this.config = {
+            'tenant': tenant,
+            'clientId': clientId,
+            //'redirectUri': window.location.origin + '/',
+            //'redirectUri': 'https://dev70860.service-now.com/sp?id=docintegrator_example_1&table=incident&sys_id=9c573169c611228700193229fff72400&view=sp&defaultTabs',
+            //'postLogoutRedirectUri': window.location.origin + '/',
+            'endpoints': {
+                'graphApiUri': 'https://graph.microsoft.com',
+                'sharePointUri': spUri
+            },
+            'cacheLocation': 'localStorage',
+            popUp: true,
+            displayCall: function (urlNavigate) {
+                var loginUrl = urlNavigate;
+                var actx = this;
+                //$sce.trustAsResourceUrl(loginUrl);
+                //$scope.url = loginUrl;
+                var popupWindow = window.open(loginUrl, "login", 'width=483, height=600');
 
-        // remove the trailing /if it exists
-        if (url[url.length - 1] == '/') {
-            url = url.substring(0, url.length - 1);
-        }
+                //per cert.
+                //popupWindow.opener = null;
+                //roll back
+                if (popupWindow && popupWindow.focus)
+                    popupWindow.focus();
+                var registeredRedirectUri = this.redirectUri;
 
-        // add the endpoint
-        url += endpoint;
+                var pollTimer = window.setInterval(function () {
+                    if (!popupWindow || popupWindow.closed || popupWindow.closed === undefined) {
+                        window.clearInterval(pollTimer);
+                        authWait = false;
+                    }
 
-        // return the result
-        return url;
-    };
+                    try {
+                        if (popupWindow.document.URL.indexOf(registeredRedirectUri) != -1) {
+                            window.clearInterval(pollTimer);
 
-    DocIntSharePoint.prototype.buildAuthToken = function (token) {
-        var bearer = token;
+                            var dta = new DocIntADAL_DS();
 
-        // ensure the token contains the Bearer prefix
-        if (!bearer.startsWith('Bearer')) {
-            bearer = 'Bearer ' + bearer;
-        }
-        // return the auth token
-        return bearer;
-    };
+                            if (dta.authContext.isCallback(popupWindow.location.hash)) {
+                                var reqInfo = dta.authContext.getRequestInfo(popupWindow.location.hash);
 
-    DocIntSharePoint.prototype.getThisList = function () {
-        return "/_api/web/Lists(guid'" + this.listId + "')";
-    };
 
-    DocIntSharePoint.prototype.getCORSAuthHeaders = function (digestToken) {
-        var headers1 = {
-            "Content-Type": "application/json;odata=verbose",
-            "Accept": "application/json;odata=verbose",
-            "crossDomain": "true",
-            "credentials": "include"
+
+                                dta.authContext.saveTokenFromHash(reqInfo);
+
+                                //window.location = authContext._getItem(authContext.CONSTANTS.STORAGE.LOGIN_REQUEST);
+                                //authContext.login();
+                                //authContext.saveTokenFromHash(popupWindow.location.hash);
+                            }
+
+                            var userctx = dta.authContext.getCachedUser();
+                            window.location.hash = popupWindow.location.hash;
+
+                            window.postMessage(popupWindow.location.hash, window.location.origin);
+
+                            popupWindow.close();
+                        }
+                    } catch (e) {
+                        //alert('error $$$ ' + e);
+                    }
+                }, 20);
+            }
         };
 
-        if (digestToken) {
-            headers1["X-RequestDigest"] = digestToken;
+        if (DocIntADAL_DS.prototype._instance) {
+            return DocIntADAL_DS.prototype._instance;
         }
 
-        return headers1;
+        this.authContext = new AuthenticationContext(this.config);
+
+        DocIntADAL_DS.prototype._instance = this;
+
+        return DocIntADAL_DS.prototype._instance;
     };
 
-    DocIntSharePoint.prototype.getBearerHeaders = function (bearer, odata) {
-        var accept = 'application/json;';
-
-        if (odata) {
-            accept = 'application/json;' + odata;
-        }
-        else {
-            //default
-            accept += "odata=verbose";
-        }
-        var headers1 = {
-            'Accept': accept,
-            'Authorization': bearer
-        };
-
-        return headers1;
+    DocIntADAL_DS.prototype.context = new function () {
+        return DocIntADAL_DS.prototype._instance;
     };
 
-    DocIntSharePoint.prototype.getSPLibraryAllInfoNoJQuery = function (token) {
+    DocIntADAL_DS.prototype.log = function (msg) { };
 
-        //var listWebEndpoint = "/_api/lists/getbytitle('" + this.list + "')";
-        var listWebEndpoint = this.getThisList();
-        //"/_api/lists(guid'" + this.listId + "')";
+    DocIntADAL_DS.prototype.validateUser = function () {
+        var user = this.authContext.getCachedUser();
 
-        //https://dtecho365.sharepoint.com/sites/ServiceNow/_api/lists
+        // no user found
+        if (user == null) {
+            this.authContext.login();
 
-        var listWebUrl = this.buildSPRestUri(listWebEndpoint);
-        var result = {}, headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-        } else {
-            //no token, implies CORS/NTLM Auth
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
+            // todo: come up with a cleaner auth check
+            user = this.authContext.getCachedUser();
         }
 
-        var listWebInfo = this.restCallWithoutJQueryV2("GET", listWebUrl, false, xhrFields, headers1);
-
-        if (listWebInfo && !listWebInfo.error && listWebInfo.data) {
-
-            var responseDataObj = JSON.parse(listWebInfo.data);
-
-            if (responseDataObj.d) {
-                result.library_id = responseDataObj.d.Id;
-            }
-            else {
-                result.error = "Failed retrieving library list from SharePoint response \n" + listsInfo.data;
-            }
-        }
-        else {
-            result.error = listWebInfo.error || listWebInfo.error;
-        }
-
-        //try get one drive id
-        // note: for sponline, from list retriveal can use /drives single call to get everyhing except item type
-        //for sponprem, still use the same call, no need for one drive stuff
-
-        //https://dtecho365.sharepoint.com/sites/ServiceNowDev1/_api/v2.0/drives?select=id,name,description,driveType
-
-        return result;
+        return user;
     };
 
-
-    DocIntSharePoint.prototype.getSPOnlineLibraryListWithOneDriveIdNoJQuery = function (token) {
-        var driveListWebEndpoint = '/_api/v2.0/drives';
-
-        var drivesWebUrl = this.buildSPRestUri(driveListWebEndpoint);
-        var result = {}, headers2, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            //{"error":{"code":"-1, Microsoft.SharePoint.Client.ClientServiceException","message":"The HTTP header ACCEPT is missing or its value is invalid."}}
-            //no odata=verbose
-            headers2 = this.getBearerHeaders(bearer, "odata.metadata=minimal");
-        } else {
-            //no token, implies CORS/NTLM Auth
-            headers2 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        var drivesInfo = this.restCallWithoutJQueryV2("GET", drivesWebUrl, false, xhrFields, headers2);
-
-        if (drivesInfo && !drivesInfo.error && drivesInfo.data) {
-
-            var responseDataObj = JSON.parse(drivesInfo.data);
-
-            result.results = responseDataObj.value;
-        }
-        else {
-            result.error = drivesInfo.error;
-        }
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.getSPLibraryListNoJQuery = function (token) {
-        var listWebEndpoint = '/_api/lists';
-        //https://dtecho365.sharepoint.com/sites/ServiceNow/_api/lists
-
-        var listWebUrl = this.buildSPRestUri(listWebEndpoint);
-        var result = {}, headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer, "odata=verbose");
-        } else {
-            //no token, implies CORS/NTLM Auth
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        var listsInfo = this.restCallWithoutJQueryV2("GET", listWebUrl, false, xhrFields, headers1);
-        if (listsInfo && !listsInfo.error && listsInfo.data) {
-
-            var responseDataObj = JSON.parse(listsInfo.data);
-
-            if (responseDataObj.d && responseDataObj.d.results) {
-                result.results = responseDataObj.d.results;
-            }
-            else {
-                result.error = "Failed retrieving library list from SharePoint response \n" + listsInfo.data;
-            }
-        }
-        else {
-            result.error = listsInfo.error;
-        }
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.validateSPSite = function (token, relative_url) {
-
-        this.site = relative_url;
-
-        var siteCollectionEndpoint = '/_api/site';
-        var siteWebEndpoint = '/_api/web';
-
-        var siteCollectionInfoUrl = this.buildSPRestUri(siteCollectionEndpoint);
-        var siteWebInfoUrl = this.buildSPRestUri(siteWebEndpoint);
-
-        var result = {}, headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-        } else {
-            //no token, implies CORS/NTLM Auth
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        var siteCollectionInfo = this.restCallWithoutJQueryV2("GET", siteCollectionInfoUrl, false, xhrFields, headers1);
-        var siteWebInfo = this.restCallWithoutJQueryV2("GET", siteWebInfoUrl, false, xhrFields, headers1);
-
-        var siteCollectionId, siteWebId, siteId, siteTitle, siteWebUrl;
-
-        if (siteCollectionInfo && !siteCollectionInfo.error && siteWebInfo && !siteWebInfo.error) {
-            siteCollectionId = JSON.parse(siteCollectionInfo.data).d.Id;
-            var d = JSON.parse(siteWebInfo.data).d;
-            siteWebId = d.Id;
-            siteTitle = d.Title;
-            siteUrl = d.Url;
-
-            var hostname = this.baseUrl.replace('http://', '').replace('https://', '');
-            siteId = hostname + "," + siteCollectionId + "," + siteWebId;
-
-            //401, invalid token??? > Grant Sites.Read.All Delegated
-            //var siteInfo = this.restCallWithoutJQuery("GET", "https://graph.microsoft.com/v1.0/sites?search=sitename", false, xhrFields, headers1);
-
-            result.siteId = siteId;
-            result.siteTitle = siteTitle;
-            result.siteUrl = siteUrl;
-            result.relative_url = relative_url;
-            result.siteDescription = d.Description;
-        }
-        else {
-            result.error = siteCollectionInfo.error || siteWebInfo.error;
-        }
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.getAJAXParamWrapper = function (token) {
-        var AJAXParamWrapper = {};
-        var headers1, xhrFields;
-
-        if (!token.endsWith('-0000')) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-            xhrFields = {};
-        } else {
-            headers1 = this.getCORSAuthHeaders(token);
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        AJAXParamWrapper.headers = headers1;
-        AJAXParamWrapper.xhrFields = xhrFields;
-        return AJAXParamWrapper;
-    };
-
-    DocIntSharePoint.prototype.buildSPItemRefRestUri = function (itemRefEndPoint) {
-
-        var url = this.baseUrl + this.site;
-        //var url = this.site;
-
-        // remove the trailing /if it exists
-        if (url[url.length - 1] == '/') {
-            url = url.substring(0, url.length - 1);
-        }
-
-        // add the endpoint
-        url += '/_api/' + itemRefEndPoint;
-
-        // return the result
-        return url;
-    };
-
-    DocIntSharePoint.prototype.createTaskIdMeta = function (name, value) {
-        var meta = '{\'__metadata\':{\'type\':\'SP.ListItem\'}, \'' + name + '\':\'' + value + '\'}';
-
-        return meta;
-    };
-
-    DocIntSharePoint.prototype.checkStatus = function (response) {
-        if (response.status >= 200 && response.status < 300) {
-            return Promise.resolve(response);
-        } else {
-            return Promise.reject(new Error(response.statusText));
-        }
-    };
-
-    DocIntSharePoint.prototype.parseJson = function (response) {
-        return response.json();
-    };
-
-    DocIntSharePoint.prototype.getDigestToken = function (root) {
-        var digestToken;
-
-        var endpoint = '/_api/contextinfo';
-        var restUrl = this.buildSPRestUri(endpoint);
-
-        if (root) {
-            restUrl = this.baseUrl + endpoint;
-        }
-
-        $.ajax({
-            url: restUrl,
-            type: "POST",
-            crossDomain: true,
-            async: false,
-            headers: this.getCORSAuthHeaders(),
-            xhrFields: {
-                withCredentials: true
-            },
-            success: function (data, status) {
-                digestToken = data.d.GetContextWebInformation.FormDigestValue;
-            },
-            error: function (xhr, e, error) {
-
-                if (error.name == "NetworkError" && !xhr.responseText) {
-                    alert("Network Error to SharePoint, Please check if SharePoint Server is up.");
-                }
-                else {
-                    alert('Error getting digest token [' + error + "], Response: " + xhr.responseText);
-                }
-            }
-        });
-
-        return digestToken;
-    };
-
-    DocIntSharePoint.prototype.getDigestTokenNoJQuery = function (root) {
-        var digestToken;
-        var endpoint = '/_api/contextinfo';
-        var restUrl = this.buildSPRestUri(endpoint);
-
-        if (root) {
-            restUrl = this.baseUrl + endpoint;
-        }
-
-        var result, headers1, xhrFields;
-
-        headers1 = this.getCORSAuthHeaders();
-        xhrFields = true;
-
-        var data = this.restCallWithoutJQuery("POST", restUrl, false, xhrFields, headers1);
-
-        if (data && JSON.parse(data).d.GetContextWebInformation.FormDigestValue) {
-            digestToken = JSON.parse(data).d.GetContextWebInformation.FormDigestValue;
-            alert("Connection Test Succeeds!");
-        } else {
-            alert("Connection Test fails");
-        }
-
-        return digestToken;
-    };
-
-    DocIntSharePoint.prototype.getSPContentTypeFieldsNoJQuery = function (token, contentTypeId) {
-        //ContentTypes('0x0101')/Fields
-        var endpoint = this.getThisList() + "/ContentTypes('" + contentTypeId + "')/Fields";
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result, headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        return this.restCallWithoutJQuery("GET", restUrl, false, xhrFields, headers1);
-    };
-
-    DocIntSharePoint.prototype.getSPContentTypeNoJQuery = function (token) {
-        var endpoint = this.getThisList() + "/ContentTypes";
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result, headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        return this.restCallWithoutJQuery("GET", restUrl, false, xhrFields, headers1);
-    };
-
-    DocIntSharePoint.prototype.getSPViewFieldsNoJQuery = function (token) {
-        var endpoint = this.getThisList() + "/fields";
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result, headers1, xhrFields;
-
-        if (token != null) {
-
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = true;
-        }
-
-        return this.restCallWithoutJQuery("GET", restUrl, false, xhrFields, headers1);
-    };
-
-    DocIntSharePoint.prototype.testLibraryNoJQuery = function (token) {
-
-        var endpoint = this.getThisList() + "/";
-
-        var restUrl = this.buildSPRestUri(endpoint);
-        var headers1, xhrFields;
-
-        if (token != null) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-
-            xhrFields = {};
-
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        var result = this.restCallWithoutJQueryV2("GET", restUrl, false, xhrFields, headers1);
-
-        // if (data && JSON.parse(data).d) {
-        //     result = JSON.parse(data).d;
+    DocIntADAL_DS.prototype.getToken = function (callback) {
+        var user = this.validateUser();
+        // var cachedToken = this.adal.getCachedToken(client_id_goes_here);
+        // if (cachedToken) {
+        //    this.adal.acquireToken("https://graph.microsoft.com", function(error, token) {
+        //         jslog(error);
+        //         jslog(token);
+        //     });
         // }
 
-        return result;
-    };
 
-    DocIntSharePoint.prototype.getSPQuery = function (endpoint, token) {
 
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result = {},
-            headers1, xhrFields;
+        // no user found
+        if (user != null) {
+            //var cachedToken = this.authContext.getCachedToken (this.authContext.config.clientId);
+            // ensure we have made the token request
+            this.authContext.acquireToken(this.authContext.config.endpoints.sharePointUri, function (error, token) {
+                // this.authContext.acquireToken(this.authContext.config.clientId, function (error, token) {
+                if (error) {
 
-        if (token != null && !token.endsWith('-0000')) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-            xhrFields = {};
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-            xhrFields = {
-                withCredentials: true
-            };
-        }
+                    // todo: ref a singletone instance
+                    var authContext = new AuthenticationContext();
 
-        $.ajax({
-            url: restUrl,
-            type: "GET",
-            dataType: 'JSON',
-            async: false,
-            headers: headers1,
-            xhrFields: xhrFields,
-            success: function (responseData) {
-                result = responseData;
-            },
-            error: function (xhr, e, error) {
-                if (xhr.responseJSON.error.code == "-2147024860, Microsoft.SharePoint.SPQueryThrottledException") {
-                    alert("\nSharePoint Library reached maxiumn number of document that query can reach, please adjust and try it again\n\n" + 'Internal SharePoint Query Error ' + JSON.stringify(xhr.responseJSON.error, null, 2));
-                } else if (xhr.responseJSON.error) {
-                    alert('SharePoint Query Error ' + xhr.responseJSON.error.code + ", message " + xhr.responseDataObj.error.message);
+                    // cheesy
+                    if (error == 'Token renewal operation failed due to timeout') {
+                        //authContext.acquireTokenPopup(authContext.config.clientId, null, null, function (error, token) {
+                        authContext.acquireTokenPopup(authContext.config.endpoints.sharePointUri, null, null, function (error, token) {
+                            if (error) {
+                                //alert('error === ' + error);
+                            } else {
+                                // authorization
+                                var bearer = 'Bearer ' + token;
+
+                                if (callback != null) {
+                                    callback(bearer);
+                                }
+                            }
+                        });
+                    }
                 } else {
-                    alert('SharePoint query Error ' + xhr.responseJSON);
-                }
-            }
-        });
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.getSPListItems = function (token) {
-        var endpoint =  this.getThisList()  + "/items";
-        var result = this.getSPQuery(endpoint, token);
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.getSPListItemsNoJQuery = function (token) {
-        var endpoint = this.getThisList() + "/items";
-        var result = this.getSPQueryNoJQuery(endpoint, token);
-
-        return result;
-    };
-    // DocIntSharePoint.prototype.testLibraryNoJQuery = function (token) {
-    //     var result = this.runGetListNoJQuery(token);
-    //     var libaryResult = {};
-    //     var result = {};
-
-    //     var message;
-
-    //     if (resultD) {
-    //         message = 'Test Library Succeeds!';
-
-    //         libaryResult.sp_library_id = resultD.Id;
-    //         libaryResult.sp_item_type = resultD.ListItemEntityTypeFullName;
-    //     }
-    //     else {
-    //         message = 'Test Library Failed!';
-    //     }
-
-    //     result.message = message;
-    //     result.libaryResult = libaryResult;
-    //     result.error = 
-
-    //     return result;
-    // };
-
-    DocIntSharePoint.prototype.getSPDocumentsByContentType = function (token, filterStr, finalOrderBy) {
-        var endpoint;
-        var expandStatement;
-
-        if (this.sharePointVersion == undefined || this.sharePointVersion == '' || this.sharePointVersion == 'O365') {
-            expandStatement = "$select=*,ServerRedirectedEmbedUri,ContentType&$expand=FieldValuesAsText,ContentType";
-
-        }
-        else {
-            //else if (this.sharePointVersion == 'SP2013-NTLM' || this.sharePointVersion == 'SP2016-NTLM' || this.sharePointVersion == 'SP2019-NTLM') {
-            expandStatement = '$select=*,ContentType,FieldValuesAsText,Author/Id&$expand=ContentType,FieldValuesAsText/Id,Author/Title,Author/Id,Author';
-        }
-
-        if (filterStr === undefined || filterStr == '') {
-            //endpoint = '/_api/web/Lists/GetByTitle(\'' + this.list + '\')/items?' + expandStatement;
-            endpoint = this.getThisList() + "/items?filter=(ID eq -1)&" + expandStatement;
-
-        } else {
-            endpoint = this.getThisList() + "/items?$filter=(" + filterStr + ")&" + expandStatement;
-        }
-
-        if (finalOrderBy != "") {
-            endpoint = endpoint + "&" + finalOrderBy;
-        }
-
-        var result = this.getSPQuery(endpoint, token);
-        if (result && !$.isEmptyObject(result)) {
-            this.processMapping(result, token, this.sharePointVersion);
-        }
-        return result;
-    };
-
-    //Used by DocIntegrator by full filter
-    DocIntSharePoint.prototype.getSPDocumentsByFilter = function (token, filterStr, finalOrderBy) {
-        var endpoint;
-        var expandStatement;
-
-        if (this.sharePointVersion == undefined || this.sharePointVersion == '' || this.sharePointVersion == 'O365') {
-            expandStatement = '$expand=FieldValuesAsText&$select=ServerRedirectedEmbedUri,*';
-        }
-        //else if (this.sharePointVersion == 'SP2013-NTLM' || this.sharePointVersion == 'SP2016-NTLM' || this.sharePointVersion == 'SP2019-NTLM') {
-        else {
-            expandStatement = '$select=*,FieldValuesAsText,Author/Id&$expand=FieldValuesAsText/Id,Author/Title,Author/Id,Author';
-        }
-
-        if (!filterStr) {
-            filterStr = "ID eq -1";
-        }
-
-        endpoint = this.getThisList() + "/items?$filter=(" + filterStr + ")&" + expandStatement;
-
-        if (finalOrderBy) {
-            endpoint = endpoint + "&" + finalOrderBy;
-        }
-
-        var result = this.getSPQuery(endpoint, token);
-
-        this.processMapping(result, token, this.sharePointVersion);
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.processMapping = function (result, token, version) {
-        var authorEndpoint = this.getThisList() + "/items?$select=Id,Author/Id,Author/Title,Editor/Id,Editor/Title&$expand=Author,Editor";
-        var authorResult = this.getSPQuery(authorEndpoint, token);
-
-        for (var r in result.d.results) {
-            for (var a in authorResult.d.results) {
-                if (result.d.results[r].FieldValuesAsText.Author == authorResult.d.results[a].Author.Id || result.d.results[r].AuthorId == authorResult.d.results[a].Author.Id && result.d.results[r].FieldValuesAsText.ID == authorResult.d.results[a].ID) {
-                    result.d.results[r].FieldValuesAsText.Author = authorResult.d.results[a].Author.Title;
-                    result.d.results[r].FieldValuesAsText.Editor = authorResult.d.results[a].Editor.Title;
-
-                    //set up for content type view fields which don't have Author/Editor
-                    result.d.results[r].FieldValuesAsText.Created_x0020_By = authorResult.d.results[a].Author.Title;
-                    result.d.results[r].FieldValuesAsText.Modified_x0020_By = authorResult.d.results[a].Editor.Title;
-                }
-            }
-        }
-    };
-    //Retired by DocIntegrator
-    DocIntSharePoint.prototype.getSPDocumentsByItemId = function (token, item, itemId) {
-        var endpoint =  this.getThisList() + "/items?$filter=(" + item + " eq '" + itemId + "')&$expand=FieldValuesAsText&$select=ServerRedirectedEmbedUri,*";
-        var result = this.getSPQuery(endpoint, token);
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.search = function (q, token, searchContext) {
-        //token will be null for on-prem
-
-        var urlProps;
-        var scope = searchContext.scope;
-        var searchQuery;
-
-        //limit by site collection
-        var sitePath;
-
-        //limit by library
-        var list;
-
-        var queryTextOpen = "{'request': { 'Querytext':'" + q;
-        var queryTextClose = "',";
-        var selectProps = searchContext.select_properties;
-        var postAPI = "/_api/search/postquery";
-
-        //urlProps = searchContext.conn.baseURL + postAPI;
-
-        //default to site-aware URL, 
-        urlProps = searchContext.conn.baseURL + searchContext.conn.relative_url + postAPI;
-        var rootLevel = false;
-
-        sitePath = " path:" + searchContext.conn.baseURL + searchContext.conn.relative_url;
-
-        if (scope == "connection") {
-            searchQuery = queryTextOpen + queryTextClose + selectProps;
-            //remove site-level
-            urlProps = searchContext.conn.baseURL + postAPI;
-            rootLevel = true;
-        } else if (scope == "site") {
-            searchQuery = queryTextOpen + sitePath + queryTextClose + selectProps;
-
-        } else if (scope == "library") {
-            searchQuery = queryTextOpen + sitePath + "/" + searchContext.conn.list_title + queryTextClose + selectProps;
-        } else if (scope == "content_type") {
-            var contentType = searchContext.conn.content_type;
-            var contentTypeFilter = '';
-
-            if (contentType != null && contentType != 'ALL') {
-                contentTypeFilter = ' ContentType:' + contentType;
-            }
-
-            var content_type_search_scope = searchContext.conn.content_type_scope;
-
-            if (content_type_search_scope == 'Site') {
-                searchQuery = queryTextOpen + contentTypeFilter + sitePath + queryTextClose + selectProps;
-            } else if (content_type_search_scope == 'Library') {
-                searchQuery = queryTextOpen + contentTypeFilter + sitePath + "/" + searchContext.conn.list_title + queryTextClose + selectProps;
-            } else {
-                //connection level                
-                searchQuery = queryTextOpen + contentTypeFilter + queryTextClose + selectProps;
-
-                urlProps = searchContext.conn.baseURL + postAPI;
-                rootLevel = true;
-            }
-        } else {
-            var configErrMsg = "Unsupported Search Scope [" + scope + "]";
-
-            alert(configErrMsg);
-        }
-
-        var resultItems = '';
-        var headers1, headers2, xhrFields;
-
-        if (!token) {
-            //site level or connection level token is different for search for on-prem case
-            token = this.getDigestToken(rootLevel);
-        }
-
-        if (token && !token.endsWith('-0000')) {
-
-            var bearer = this.buildAuthToken(token);
-
-            headers2 = {
-                'Accept': 'application/json; odata=verbose',
-                'Authorization': bearer,
-                'Content-Type': 'application/json; odata=verbose'
-            };
-
-            xhrFields = {};
-        } else {
-            headers2 = this.getCORSAuthHeaders(token);
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        $.ajax({
-            url: urlProps,
-            type: 'POST',
-            //crossDomain: true,
-            async: false,
-            headers: headers2,
-            data: searchQuery,
-            processData: false,
-            dataType: 'json',
-            xhrFields: xhrFields,
-            success: function (data, status) {
-                resultItems = data.d.postquery.PrimaryQueryResult.RelevantResults;
-            },
-            error: function (xhr, e, error) {
-                alert("Search error: " + JSON.stringify(error) + "\r\ne: " + JSON.stringify(e) + "xhr.responseText: " + JSON.stringify(xhr.responseText));
-            }
-        });
-
-        return resultItems;
-    };
-
-    DocIntSharePoint.prototype.postSPDocumentMeta = function (itemRef, token, meta) {
-        var itemId = -1;
-        var urlProps = itemRef + '/listitemallfields';
-        var urlListItem = '';
-
-        var headers1, headers2, xhrFields;
-
-        if (!token.endsWith('-0000')) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-
-            headers2 = {
-                'Accept': 'application/json; odata=verbose',
-                'Authorization': bearer,
-                'Content-Type': 'application/json; odata=verbose',
-                'IF-MATCH': '*',
-                'X-HTTP-Method': 'MERGE'
-            };
-
-            xhrFields = {};
-        } else {
-
-            if (this.sharePointVersion.toUpperCase() == 'SP2013-NTLM') {
-                //before urlProps = "Web/api/abcd";
-                urlProps = this.buildSPItemRefRestUri(urlProps);
-                //after urlProps = "https://host/sites/sitename/Web/api/abcd"
-            }
-
-            headers1 = {
-                "Content-Type": "'application/json;odata=verbose'",
-                "Accept": "application/json;odata=verbose",
-                "crossDomain": "true",
-                "credentials": "include" //,
-            };
-
-            headers2 = {
-                "Content-Type": "application/json;odata=verbose",
-                "Accept": "application/json;odata=verbose",
-                "crossDomain": "true",
-                "credentials": "include",
-                'IF-MATCH': '*',
-                'X-HTTP-Method': 'MERGE',
-                "X-RequestDigest": token
-            };
-
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        // get the document list item id
-        $.ajax({
-            url: urlProps,
-            type: "GET",
-            crossDomain: true,
-            async: false,
-            headers: headers1,
-            xhrFields: xhrFields,
-            success: function (data, status) {
-                // get the item id
-                itemId = data.d.ID;
-                urlListItem = data.d.__metadata.uri;
-            },
-            error: function (xhr, e, error) {
-                alert('error' + error + e + xhr);
-            }
-        });
-
-        this.postMetadataByItemUri(token, urlListItem, meta);
-    };
-
-    DocIntSharePoint.prototype.postMetadataByItemUri = function (token, itemUri, meta) {
-        // update the list item 
-        var headers2, xhrFields;
-
-        if (!token.endsWith('-0000')) {
-            var bearer = this.buildAuthToken(token);
-            headers2 = {
-                'Accept': 'application/json; odata=verbose',
-                'Authorization': bearer,
-                'Content-Type': 'application/json; odata=verbose',
-                'IF-MATCH': '*',
-                'X-HTTP-Method': 'MERGE'
-            };
-
-            xhrFields = {};
-        } else {
-            headers2 = {
-                "Content-Type": "application/json;odata=verbose",
-                "Accept": "application/json;odata=verbose",
-                "crossDomain": "true",
-                "credentials": "include",
-                'IF-MATCH': '*',
-                'X-HTTP-Method': 'MERGE',
-                "X-RequestDigest": token
-            };
-
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        var updateSuccess = false;
-
-        $.ajax({
-            url: itemUri,
-            type: 'POST',
-            crossDomain: true,
-            async: false,
-            data: meta,
-            length: meta.length,
-            headers: headers2,
-            xhrFields: xhrFields,
-            success: function (data, status) {
-                updateSuccess = true;
-            },
-            error: function (xhr, e, error) {
-                alert('Metadata Updating Error \n' + xhr.responseJSON.error.message.value + "\r\nMeta:  " + meta);
-            }
-        });
-
-        return updateSuccess;
-    };
-
-    DocIntSharePoint.prototype.checkFilenameIsExistBySPSiteURL = function (token, SPSiteURL, fileByServerRelativeUrl, AJAXParamWrapper) {   //Short GET Calls to check if a file name is being used. 
-        //fileByServerRelativeUrl => '/sites/SerivceNowDev2/targetLibname/filename
-        var restUrl = SPSiteURL + '/_api/web/getfilebyserverrelativeurl(\'' + fileByServerRelativeUrl + '\')';
-
-        var isExist = false;
-        $.ajax({
-            url: restUrl,
-            type: "GET",
-            crossDomain: true,
-            async: false,
-            headers: AJAXParamWrapper.headers,
-            xhrFields: AJAXParamWrapper.xhrFields,
-            success: function (data, status) {
-                //result = data.d.__metadata.id;
-                isExist = true;
-            },
-            error: function (xhr, e, error) {
-                if (error.status == 404) {
-                    //log("file doesnt exist");
-                }
-            }
-        });
-
-        return isExist;
-    };
-
-    DocIntSharePoint.prototype.copySP2SP = function (token, item, contextObj, searchContext) {
-        var AJAXParamWrapper = this.getAJAXParamWrapper(token);
-        var sourceConn = searchContext.conn;
-        var targetConn = contextObj.conn;
-
-        //file1        
-        var filename = item.Filename;
-        //https://hostname/sites/servicenow/Dev1Lib1/test-folder1/canvas.pdf"
-
-        var sitesIndexPos = item.Path.indexOf("/sites/");
-        var filenameIndexPos = item.Path.indexOf(filename);
-
-        // ServerRelativeUrl without filename        
-        var relativePathTarget = targetConn.relative_url + "/" + targetConn.list_title + "/";
-
-        //"/sites/ServiceNowDev1/Dev1Lib1/" or //"/sites/ServiceNowDev1/Dev1Lib1/DS-folder"
-        var relativePathSource = item.Path.substring(sitesIndexPos, filenameIndexPos);
-
-        var isFileExist = true;
-        var temp_fileByServerRelativeUrl = relativePathTarget + filename;
-
-        if (relativePathSource != relativePathTarget) {
-            //could be the same lib due to the folder or different lib
-            var targetSitURL = targetConn.baseURL + targetConn.relative_url;
-
-            isFileExist = this.checkFilenameIsExistBySPSiteURL(token, targetSitURL, temp_fileByServerRelativeUrl, AJAXParamWrapper);
-        }
-        else {
-            //same lib, same folder (root level)
-        }
-
-        var temp_new_file_name;
-
-        if (isFileExist) {
-            var i = 1;
-            var name_only = filename.split('.').slice(0, -1).join('.');
-            var ext = filename.split('.').pop();
-
-            if (ext == filename) {
-                ext = '';
-                name_only = filename;
-            }
-
-            //continue to check until found one that doesn't exist.
-            while (isFileExist) {
-                temp_new_file_name = name_only + " " + i;
-                i++;
-
-                if (i > 2000) break;
-
-                if (ext && ext.length > 0) {
-                    temp_new_file_name += "." + ext;
-                }
-
-                temp_fileByServerRelativeUrl = relativePathTarget + temp_new_file_name;
-                isFileExist = this.checkFilenameIsExistBySPSiteURL(token, item.SPSiteURL, temp_fileByServerRelativeUrl, AJAXParamWrapper);
-            }
-
-            if (temp_new_file_name) {
-                filename = temp_new_file_name;
-            }
-        }
-
-        var urlCopyTo = item.SPSiteURL + "/_api/web/getfilebyserverrelativeurl('" + item.Path.substring(sitesIndexPos) + "')/copyTo(strNewUrl='" + temp_fileByServerRelativeUrl + "',bOverWrite=false)";
-
-        var fileCopySuccess = false;
-        //Make a copy of the document
-        $.ajax({
-            url: urlCopyTo,
-            type: 'POST',
-            crossDomain: true,
-            async: false,
-            //data: meta,
-            //length: meta.length,
-            headers: AJAXParamWrapper.headers,
-            xhrFields: AJAXParamWrapper.xhrFields,
-            success: function (data, status) {
-                //alert('Docment copied Successfully to ' + temp_fileByServerRelativeUrl);
-                //            
-                fileCopySuccess = true;
-            },
-            error: function (xhr, e, error) {
-                alert('File fails to copy - Error \n' + xhr.responseJSON.error.message.value);
-            }
-        });
-
-        var itemUri;
-        var itemRef = item.SPSiteURL + "/_api/web/getfilebyserverrelativeurl('" + temp_fileByServerRelativeUrl + "')";
-
-        if (fileCopySuccess) {
-            var urlProps = itemRef + '/listitemallfields';
-
-            // get the document list item id
-            $.ajax({
-                url: urlProps,
-                type: "GET",
-                crossDomain: true,
-                async: false,
-                headers: AJAXParamWrapper.headers,
-                xhrFields: AJAXParamWrapper.xhrFields,
-                success: function (data, status) {
-                    // get the item id
-                    itemUri = data.d.__metadata.uri;
-                },
-                error: function (xhr, e, error) {
-                    alert('error' + error + e + xhr);
+                    // authorization
+                    var bearer = 'Bearer ' + token;
+
+                    if (callback != null) {
+                        callback(bearer);
+                    }
                 }
             });
-
-        }
-        else {
-            alert("File Transfer fails");
         }
 
-        if (itemUri) {
-            itemUri = itemUri.replace(/[{}]/g, "");
-        }
-        return itemUri;
+        return user;
     };
 
-    // https://social.msdn.microsoft.com/Forums/office/en-US/357f5c7d-77b1-4d04-9956-3498ce33a5e0/upload-big-file-to-sharepoint-with-rest-api
-    // TODO: Need to look at adding a parameter for folder specification.
-    DocIntSharePoint.prototype.postSPFile = function (token, filename, buffer, meta, folder) {
-        //upload content
-        //var itemRef = this.postSPFileBinary(token, filename, buffer, "/testfolder1/testfolder2");
-        var itemRef = this.postSPFileBinary(token, filename, buffer, folder);
-
-        //update metadata
-        if (itemRef) {
-            this.postSPDocumentMeta(itemRef, token, meta);
-        }
-
-        return itemRef;
-    };
-
-    DocIntSharePoint.prototype.postSPFileBinary = function (token, filename, buffer, folder) {
-        //fetch common headers
-        var AJAXParamWrapper = this.getAJAXParamWrapper(token);
-
-        //handles binary file upload and duplicate file names
-        var isFileExist = this.checkFilenameIsExist(token, filename, AJAXParamWrapper, folder);
-
-        if (isFileExist) {
-            var i = 1;
-            var name_only = filename.split('.').slice(0, -1).join('.');
-            var ext = filename.split('.').pop();
-
-            if (ext == filename) {
-                ext = '';
-                name_only = filename;
-            }
-            var temp_new_file_name;
-
-            //continue to check until found one that doesn't exist.
-            while (isFileExist) {
-                temp_new_file_name = name_only + " " + i;
-                i++;
-
-                if (i > 1000) break;
-
-                if (ext && ext.length > 0) {
-                    temp_new_file_name += "." + ext;
-                }
-
-                isFileExist = this.checkFilenameIsExist(token, temp_new_file_name, AJAXParamWrapper, folder);
-            }
-
-            if (temp_new_file_name) {
-                filename = temp_new_file_name;
-            }
-        }
-
-        //var endpoint = '/_api/web/lists/(\'' + this.list + '\')/rootfolder/';
-        var endpoint = "/_api/web/GetFolderByServerRelativeUrl(\'" + this.site + "/" + this.listPath;
-        // + folder + "\')";
-
-        if (folder) {
-            endpoint += folder;
-        }
-        else {
-        }
-
-        endpoint += "\')/files/add(url=\'" + filename + "\', overwrite = false)";
-
-        var restUrl = this.buildSPRestUri(endpoint);
-
-        var itemRef;
-        $.ajax({
-            url: restUrl,
-            type: "POST",
-            crossDomain: true,
-            data: buffer,
-            async: false,
-            processData: false,
-            length: buffer.byteLength,
-            headers: AJAXParamWrapper.headers,
-            xhrFields: AJAXParamWrapper.xhrFields,
-            success: function (data, status) {
-                //result = data.d.__metadata.id;
-                itemRef = data.d.__metadata.id;
-
-                //for 2013, itemRef looks like 'Web/a/b/c
-                //for 2016/2019, itemRef looks like 'http://host/site/sitename/_api/Web/a/b/c                
-            },
-            error: function (xhr, e, error) {
-                alert('Upload SharePoint Error ' + error + e + xhr.responseText);
-            }
-        });
-
-        return itemRef;
-    };
-
-    DocIntSharePoint.prototype.checkFilenameIsExist = function (token, filename, AJAXParamWrapper, folder) {
-        var fileByServerRelativeUrl = this.site + "/" + this.listPath;
-
-        if (folder) {
-            fileByServerRelativeUrl += folder;
-        }
-
-        fileByServerRelativeUrl += "/" + filename;
-
-        var endpoint = '/_api/web/getfilebyserverrelativeurl(\'' + fileByServerRelativeUrl + '\')';
-
-        var restUrl = this.buildSPRestUri(endpoint);
-        var isExist = false;
-
-        $.ajax({
-            url: restUrl,
-            type: "GET",
-            crossDomain: true,
-            async: false,
-            headers: AJAXParamWrapper.headers,
-            xhrFields: AJAXParamWrapper.xhrFields,
-            success: function (data, status) {
-                //result = data.d.__metadata.id;
-                isExist = true;
-            },
-            error: function (xhr, e, error) {
-                if (error.status == 404) {
-                    //log("file doesnt exist");
-                }
-            }
-        });
-
-        return isExist;
-    };
-
-    DocIntSharePoint.prototype.postSPFileNoJQuery = function (token, filename, buffer, meta) {
-        var endpoint = this.getThisList() + "/rootfolder/files/add(url='" + filename + "', overwrite = true)";
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result = null;
-        var localRef = this;
-        var headers1, xhrFields;
-
-        if (!token.endsWith('-0000')) {
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-            xhrFields = {};
-        } else {
-            var headers_temp = this.getCORSAuthHeaders();
-            headers_temp["X-RequestDigest"] = token;
-            headers1 = headers_temp;
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-
-        var xhr = new XMLHttpRequest();
-
-        xhr.open("POST", restUrl, false);
-        // `false` makes the request synchronous
-        //set headers
-        for (var key in headers1) {
-            xhr.setRequestHeader(key, headers1[key]);
-        }
-
-        //set cors
-        xhr.withCredentials = xhrFields;
-
-        xhr.send(buffer);
-
-        if (xhr.status === 200) {
-            jslog(xhr.responseText);
-
-            return xhr.responseText;
-        } else {
-            return {};
-        }
-    };
-
-    DocIntSharePoint.prototype.getLibContentTypes = function (token) {
-        var endpoint = this.getThisList() + "/contenttypes";
-        var restUrl = this.buildSPRestUri(endpoint);
-        var result, headers1, xhrFields;
-
-        if (token != null) {
-
-            var bearer = this.buildAuthToken(token);
-            headers1 = this.getBearerHeaders(bearer);
-
-            xhrFields = {};
-
-        } else {
-            headers1 = this.getCORSAuthHeaders();
-
-            xhrFields = {
-                withCredentials: true
-            };
-        }
-        $.ajax({
-            url: restUrl,
-            type: "GET",
-            dataType: 'JSON',
-            async: false,
-            headers: headers1,
-            xhrFields: xhrFields,
-            success: function (responseData) {
-                result = responseData.d.results;
-            },
-            error: function (xhr, e, error) {
-                alert('SharePoint Query Error ' + error + e + xhr.responseText);
-            }
-        });
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.restCallWithoutJQueryV2 = function (httpMethod, restUrl, asynchronous, withCredentials, headers1) {
-        var xhr = new XMLHttpRequest();
-
-        var result = {};
-
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) { //if complete
-                if (xhr.status === 200) { //check if "OK" (200)
-                    //success
-                } else {
-                }
-            } else {
-                //alert('other state');
-            }
-        };
-
-        xhr.open(httpMethod, restUrl, asynchronous); // `false` makes the request synchronous
-        //set headers
-        //xhr.setRequestHeader("Cache-Control", "no-cache");
-
-        for (var key in headers1) {
-            xhr.setRequestHeader(key, headers1[key]);
-        }
-
-        //set cors
-        xhr.withCredentials = withCredentials;
-
-        try {
-            xhr.send(null);
-            if (xhr.status === 200) {
-                jslog(xhr.responseText);
-                result.data = xhr.responseText;
-            } else {
-                result.error = xhr.responseText + ", " + xhr.responseURL;
-            }
-        } catch (e) {
-            result.error = e;
-        }
-
-        return result;
-    };
-
-    DocIntSharePoint.prototype.restCallWithoutJQuery = function (httpMethod, restUrl, asynchronous, withCredentials, headers1) {
-        var xhr = new XMLHttpRequest();
-
-        xhr.onreadystatechange = function () {
-            if (xhr.readyState === 4) { //if complete
-                if (xhr.status === 200) { //check if "OK" (200)
-                    //success
-                } else {
-
-                    alert('REST Call Error \n' + xhr.responseText + ", " + xhr.responseURL); //otherwise, some other code was returned
-                    return null;
-                }
-            } else {
-                //alert('other state');
-            }
-        };
-
-        xhr.open(httpMethod, restUrl, asynchronous); // `false` makes the request synchronous
-        //set headers
-        for (var key in headers1) {
-            xhr.setRequestHeader(key, headers1[key]);
-        }
-
-        //set cors
-        xhr.withCredentials = withCredentials;
-
-        try {
-            xhr.send(null);
-            if (xhr.status === 200) {
-                jslog(xhr.responseText);
-
-                return xhr.responseText;
-            } else {
-                return {};
-            }
-        } catch (e) {
-            alert(" error " + e);
-            return null;
-        }
-    };
-
-    DocIntSharePoint.prototype.processSearchResults = function (relevantResults, serviceNowLinkProperty) {
-        //items will be RelevantResults
-        var uniqueSIDSet = new Set();
-        var listIdArray = [];
-        var results = [];
-        var processingResults = {};
-
-        var tableRowResults = relevantResults.Table.Rows.results;
-        for (var spResultItem in tableRowResults) {
-            var searchResultItem = {};
-            var DocItem = tableRowResults[spResultItem];
-
-            for (var cellResultsItem in DocItem.Cells.results) {
-                var fieldName = DocItem.Cells.results[cellResultsItem].Key;
-                var fieldValue = DocItem.Cells.results[cellResultsItem].Value;
-                var fieldType = DocItem.Cells.results[cellResultsItem].ValueType;
-                var metadata = DocItem.Cells.results[cellResultsItem].__metadata;
-
-                searchResultItem[fieldName] = fieldValue;
-                searchResultItem.type = fieldType;
-                searchResultItem.metadata = metadata;
-            }
-
-            //Create a ServiceNow App ID based on full path
-            searchResultItem.SID = searchResultItem.Path;
-
-            uniqueSIDSet.add(searchResultItem.SID);
-
-            //remove {} for SP2013 search
-            searchResultItem.ListID = searchResultItem.ListID.replace(/[{}]/g, "");
-
-            if (searchResultItem.ListID && !listIdArray.includes(searchResultItem.ListID)) {
-                listIdArray.push(searchResultItem.ListID);
-            }
-
-            var itemUri = searchResultItem.SPSiteURL + "/_api/Web/Lists(guid'" + searchResultItem.ListID + "')/Items(" + searchResultItem.ListItemID + ")";
-
-            searchResultItem.itemUri = itemUri;
-
-            // if (searchResultItem.ServerRedirectedURL) {
-            //     searchResultItem.url = searchResultItem.ServerRedirectedURL;
-            // } else {
-            //     searchResultItem.url = searchResultItem.Path;
-            // }
-
-            //for PDF online, ServerRedirectedEmbedURL is not empty but ServerRedirectedURL is
-            //so ServerRedirectedEmbedURL is more reliable
-            if (searchResultItem.ServerRedirectedEmbedURL) {
-                searchResultItem.url = searchResultItem.ServerRedirectedEmbedURL;
-            } else {
-                searchResultItem.url = searchResultItem.Path;
-            }
-
-            // set servicenowlink 
-            //replace(/'/g,'');
-            if (serviceNowLinkProperty) {
-                var propertyNameWithoutSingleQuote = serviceNowLinkProperty.replace(/'/g, '');
-                if (searchResultItem[propertyNameWithoutSingleQuote]) {
-                    searchResultItem.servicenowLink = searchResultItem[propertyNameWithoutSingleQuote];
-                }
-            }
-
-            results.push(searchResultItem);
-        }
-
-        processingResults.results = results;
-        processingResults.searchUniqueIDSet = uniqueSIDSet;
-        processingResults.hasListIDs = listIdArray;
-
-        return processingResults;
-    };
-
-    DocIntSharePoint.prototype.lookupContentTypeId = function (content_type, content_type_blob) {
-        var contentTypeBlobObj = JSON.parse(content_type_blob);
-
-        for (var item in contentTypeBlobObj) {
-            if (contentTypeBlobObj[item].Name === content_type) {
-                return contentTypeBlobObj[item].ContentTypeId;
-            }
-        }
-    };
-
-    DocIntSharePoint.prototype.keepQueryContentSearchItems = function (searchResultsItems, queryResultsItemsMap, selectPropertiesMap, searchResultSIDSet) {
-        var results = [];
-
-        for (var n in searchResultsItems) {
-            var searchResultItem = searchResultsItems[n];
-
-            var matchingQueryItem = queryResultsItemsMap[searchResultItem.SID];
-
-            if (matchingQueryItem) {
-                //preferred to use query item if matched
-                results.push(matchingQueryItem);
-            } else {
-                var contentTypeField;
-
-                Object.keys(searchResultItem).forEach(function (searchResultIndexKey) {
-                    //looping through all the keys
-                    //e.g. searchResultIndexKey is 'Filename'
-                    contentTypeField = selectPropertiesMap[searchResultIndexKey];
-
-                    //for rank, contentTypeField will be null
-                    if (contentTypeField && contentTypeField != searchResultIndexKey) {
-                        //meaning this contentTypeField is mapped to an index name
-
-                        searchResultItem[contentTypeField] = searchResultItem[searchResultIndexKey];
-                        //set the value to a new key
-                    }
-                });
-
-                var Path = searchResultItem["Path"];
-                var SPSiteURL = searchResultItem["SPSiteURL"];
-
-                //position of the slash immediately after the Sit URL which is the length of Site URL
-                var indexOfFirstSlash = SPSiteURL.length + 1;
-
-                var pathWithoutSite = Path.substring(indexOfFirstSlash);
-
-                var indexOfSecondSlash = pathWithoutSite.indexOf('/');
-
-                var list_title = pathWithoutSite.substring(0, indexOfSecondSlash);
-
-                searchResultItem["edit_url"] = SPSiteURL + "/" + list_title + "/Forms/EditForm.aspx?ID=" + searchResultItem.ListItemID + "&IsDlg=1";
-
-                //see line 1334 about ServerRedirectedEmbedURL
-                if (searchResultItem.ServerRedirectedEmbedURL) {
-                    searchResultItem["url"] = searchResultItem.ServerRedirectedEmbedURL;
-                } else {
-                    searchResultItem["url"] = Path;
-                }
-
-                results.push(searchResultItem);
-            }
-        }
-
-        return results;
-    };
-
-    DocIntSharePoint.prototype.mergeAndProcessSPCombinedItems = function (searchResultsItems, queryResultsItems, selectPropertiesMap, querySIDSet) {
-        //var mergedArray = searchResultsItems.concat(queryResultsItems);
-
-        for (var n in searchResultsItems) {
-            var searchResultItem = searchResultsItems[n];
-
-            if (querySIDSet.has(searchResultItem.SID)) {
-                //alert("duplicate removed " + searchResultItem.SID);
-            } else {
-                //
-                var contentTypeField;
-
-                Object.keys(searchResultItem).forEach(function (searchResultIndexKey) {
-                    //looping through all the keys
-                    //e.g. searchResultIndexKey is 'Filename', contentTypeField is 'FileLeafRef'
-                    contentTypeField = selectPropertiesMap[searchResultIndexKey];
-
-                    //for rank, contentTypeField will be null
-                    if (contentTypeField && contentTypeField != searchResultIndexKey) {
-                        //meaning this contentTypeField is mapped to an index name
-
-                        searchResultItem[contentTypeField] = searchResultItem[searchResultIndexKey];
-                        //set the value to a new key
-                    }
-                });
-
-                var Path = searchResultItem["Path"];
-                var SPSiteURL = searchResultItem["SPSiteURL"];
-
-                //position of the slash immediately after the Sit URL which is the length of Site URL
-                var indexOfFirstSlash = SPSiteURL.length + 1;
-
-                var pathWithoutSite = Path.substring(indexOfFirstSlash);
-
-                var indexOfSecondSlash = pathWithoutSite.indexOf('/');
-
-                var list_title = pathWithoutSite.substring(0, indexOfSecondSlash);
-
-                searchResultItem["edit_url"] = SPSiteURL + "/" + list_title + "/Forms/EditForm.aspx?ID=" + searchResultItem.ListItemID + "&IsDlg=1";
-
-                if (searchResultItem.ServerRedirectedEmbedURL) {
-                    searchResultItem["url"] = searchResultItem.ServerRedirectedEmbedURL;
-                } else {
-                    searchResultItem["url"] = Path;
-                }
-
-                queryResultsItems.push(searchResultItem);
-            }
-        }
-
-        return queryResultsItems;
-    };
-
-    return DocIntSharePoint;
+    return DocIntADAL_DS;
 }());
+
+
+/* JSONPath 0.8.0 - XPath for JSON
+     *
+     * Copyright (c) 2007 Stefan Goessner (goessner.net)
+     * Licensed under the MIT (MIT-LICENSE.txt) licence.
+     */
+function jsonPath(obj, expr, arg) {
+    var P = {
+        resultType: arg && arg.resultType || "VALUE",
+        result: [],
+        normalize: function (expr) {
+            var subx = [];
+            return expr.replace(/[\['](\??\(.*?\))[\]']/g, function ($0, $1) { return "[#" + (subx.push($1) - 1) + "]"; })
+                .replace(/'?\.'?|\['?/g, ";")
+                .replace(/;;;|;;/g, ";..;")
+                .replace(/;$|'?\]|'$/g, "")
+                .replace(/#([0-9]+)/g, function ($0, $1) { return subx[$1]; });
+        },
+        asPath: function (path) {
+            var x = path.split(";"), p = "$";
+            for (var i = 1, n = x.length; i < n; i++)
+                p += /^[0-9*]+$/.test(x[i]) ? ("[" + x[i] + "]") : ("['" + x[i] + "']");
+            return p;
+        },
+        store: function (p, v) {
+            if (p) P.result[P.result.length] = P.resultType == "PATH" ? P.asPath(p) : v;
+            return !!p;
+        },
+        trace: function (expr, val, path) {
+            if (expr) {
+                var x = expr.split(";"), loc = x.shift();
+                x = x.join(";");
+                if (val && val.hasOwnProperty(loc))
+                    P.trace(x, val[loc], path + ";" + loc);
+                else if (loc === "*")
+                    P.walk(loc, x, val, path, function (m, l, x, v, p) { P.trace(m + ";" + x, v, p); });
+                else if (loc === "..") {
+                    P.trace(x, val, path);
+                    P.walk(loc, x, val, path, function (m, l, x, v, p) { typeof v[m] === "object" && P.trace("..;" + x, v[m], p + ";" + m); });
+                }
+                else if (/,/.test(loc)) { // [name1,name2,...]
+                    for (var s = loc.split(/'?,'?/), i = 0, n = s.length; i < n; i++)
+                        P.trace(s[i] + ";" + x, val, path);
+                }
+                else if (/^\(.*?\)$/.test(loc)) // [(expr)]
+                    P.trace(P.eval(loc, val, path.substr(path.lastIndexOf(";") + 1)) + ";" + x, val, path);
+                else if (/^\?\(.*?\)$/.test(loc)) // [?(expr)]
+                    P.walk(loc, x, val, path, function (m, l, x, v, p) { if (P.eval(l.replace(/^\?\((.*?)\)$/, "$1"), v[m], m)) P.trace(m + ";" + x, v, p); });
+                else if (/^(-?[0-9]*):(-?[0-9]*):?([0-9]*)$/.test(loc)) // [start:end:step]  phyton slice syntax
+                    P.slice(loc, x, val, path);
+            }
+            else
+                P.store(path, val);
+        },
+        walk: function (loc, expr, val, path, f) {
+            if (val instanceof Array) {
+                for (var i = 0, n = val.length; i < n; i++)
+                    if (i in val)
+                        f(i, loc, expr, val, path);
+            }
+            else if (typeof val === "object") {
+                for (var m in val)
+                    if (val.hasOwnProperty(m))
+                        f(m, loc, expr, val, path);
+            }
+        },
+        slice: function (loc, expr, val, path) {
+            if (val instanceof Array) {
+                var len = val.length, start = 0, end = len, step = 1;
+                loc.replace(/^(-?[0-9]*):(-?[0-9]*):?(-?[0-9]*)$/g, function ($0, $1, $2, $3) { start = parseInt($1 || start); end = parseInt($2 || end); step = parseInt($3 || step); });
+                start = (start < 0) ? Math.max(0, start + len) : Math.min(len, start);
+                end = (end < 0) ? Math.max(0, end + len) : Math.min(len, end);
+                for (var i = start; i < end; i += step)
+                    P.trace(i + ";" + expr, val, path);
+            }
+        },
+        eval: function (x, _v, _vname) {
+            try { return $ && _v && eval(x.replace(/@/g, "_v")); }
+            catch (e) { throw new SyntaxError("jsonPath: " + e.message + ": " + x.replace(/@/g, "_v").replace(/\^/g, "_a")); }
+        }
+    };
+
+    var $ = obj;
+    if (expr && obj && (P.resultType == "VALUE" || P.resultType == "PATH")) {
+        P.trace(P.normalize(expr).replace(/^\$;/, ""), obj, "$");
+        return P.result.length ? P.result : false;
+    }
+}
+
+function validateLibrary(g_form) {
+    var isValid = false;
+
+    var currentLibraryId = g_form.getUniqueValue();
+
+    //sys_id of connection
+    var connection = g_form.getValue('connectionid');
+    var conn_base_url = g_scratchpad.conn_base_url;
+
+    var relative_url = g_form.getValue('relative_url');
+    var list_title = g_form.getValue('list_title');
+
+    var one_drive_id = g_form.getValue('one_drive_id');
+    var content_type = g_form.getValue('content_type');
+    var sp_site_id = g_form.getValue('sp_site_id');
+    var sp_library_id = g_form.getValue('library_id');
+
+    var connectionType = g_scratchpad.conn_type;
+
+    debugger;
+
+    if (connectionType != 'o365') {
+
+        //alert('Test Library in progress for ' + connectionType);
+
+        var sp = new DocIntSharePoint(conn_base_url, relative_url, list_title, connectionType,sp_library_id);
+
+        var result = sp.testLibraryNoJQuery(null);
+
+        if (result && !result.error && result.data) {
+
+            var responseDataObj = JSON.parse(result.data);
+
+            if (responseDataObj.d) {
+                g_form.addInfoMessage(DOCINT_CONSTANT_MSG_TEST_LIB_OK);
+                isValid = true;
+
+                var splibraryId = responseDataObj.d.Id;
+                var itemType = responseDataObj.d.ListItemEntityTypeFullName;
+
+                //         libaryResult.sp_library_id = resultD.Id;
+                //         libaryResult.sp_item_type = resultD.ListItemEntityTypeFullName;
+                //update additional meta-data from test library call
+                var ga = new GlideAjax('ValidateConnectionAjaxService');
+                ga.addParam('sysparm_name', 'updateSPLibrary');
+
+                ga.addParam('sysparm_currentLibrarySysId', currentLibraryId);
+                ga.addParam('sysparm_sp_library_id', splibraryId);
+                ga.addParam('sysparm_sp_item_type', itemType);
+
+                ga.getXML(function () { });
+            }
+            else {
+                g_form.addErrorMessage("Failed retrieving library list from SharePoint response \n" + result.data);
+
+            }
+        }
+        else {
+            g_form.addErrorMessage(result.error);
+        }
+    } else if (connectionType == 'o365') {
+        //alert('Test Library to SharePoint Online');
+
+        var ga = new GlideAjax('ValidateConnectionAjaxService');
+        ga.addParam('sysparm_name', 'validateSPOLibrary');
+
+        ga.addParam('sysparm_currentConnectionId', connection);
+        ga.addParam('sysparm_relative_url', relative_url);
+        ga.addParam('sysparm_list_title', list_title);
+        ga.addParam('sysparm_content_type', content_type);
+        ga.addParam('sysparm_one_drive_id', one_drive_id);
+        ga.addParam('sysparm_sp_site_id', sp_site_id);
+        ga.addParam('sysparm_sp_library_id', sp_library_id);
+
+        ga.getXMLWait();
+
+        //ga.getXML(processAjaxResponse);
+
+        var answer = ga.getAnswer();
+
+        if (answer) {
+            isValid = true;
+            g_form.addInfoMessage(answer);
+        }
+        else {
+        }
+
+        //async
+        return isValid;
+    }
+
+    // function processAjaxResponse(validationResponse) {
+    //     var answer;
+    //     if (validationResponse && validationResponse.responseXML) {
+    //         answer = validationResponse.responseXML.documentElement.getAttribute("answer");
+    //     } else {
+    //         answer = validationResponse;
+    //     }
+
+    //     isValid = true;
+    //     g_form.addInfoMessage(answer);
+
+    //     //async
+    //     return isValid;
+    // }
+
+}
+
+function getContentType(g_form, expr, arg) {
+    var currentLibraryId = g_form.getUniqueValue();
+
+    //sys_id of connection
+    var connection = g_form.getValue('connectionid');
+    var conn_base_url = g_scratchpad.conn_base_url;
+
+    var library_name = g_form.getValue('name');
+    var relative_url = g_form.getValue('relative_url');
+    var list_title = g_form.getValue('list_title');
+
+    var one_drive_id = g_form.getValue('one_drive_url');
+    var content_type = g_form.getValue('content_type');
+    var sp_site_id = g_form.getValue('sp_site_id');
+    var sp_library_id = g_form.getValue('library_id');
+
+    var connectionType = g_scratchpad.conn_type;
+
+    var client_id = g_scratchpad.conn_client_id;
+    var tenant_name = g_scratchpad.conn_tenant_name;
+
+    var caller = g_form.getReference("connectionid", doProcess);
+
+    debugger;
+
+    function doProcess(caller) {
+        //alert(" curent content_type  " + content_type);
+
+        connectionType = caller.conn_type;
+        var contentTypes = null;
+
+        if (connectionType != 'o365') {
+            //alert('Test Library to SP2013 in progress');
+            var sp = new DocIntSharePoint(conn_base_url, relative_url, list_title, connectionType, sp_library_id);
+
+            contentTypes = sp.getSPContentTypeNoJQuery(null);
+        } else {
+            var _dtadlal = new DocIntADAL_DS(client_id, tenant_name, conn_base_url);
+
+            var dtsp = new DocIntSharePoint(conn_base_url, relative_url, list_title, connectionType, sp_library_id);
+
+            _dtadlal.getToken(function (token) {
+
+                contentTypes = dtsp.getSPContentTypeNoJQuery(token);
+
+            }, _dtadlal.authContext);
+        }
+
+        var spContentTypeResponseObject = JSON.parse(contentTypes);
+
+        var contentTypesBlob = [];
+
+        var currValue = g_form.getValue('content_type');
+        g_form.clearOptions('content_type');
+
+        g_form.addOption('content_type', 'ALL', 'ALL');
+        //if (spContentTypeResponseObject) g_form.clearOptions('content_type');
+
+        for (var j = 0; j < spContentTypeResponseObject.d.results.length; j++) {
+
+            var curr = spContentTypeResponseObject.d.results[j];
+
+            var contentTypeElement = {};
+
+            //Mapping Rules
+            contentTypeElement.Name = curr.Name;
+            contentTypeElement.ContentTypeId = curr.Id.StringValue;
+            contentTypeElement.Selected = false;
+
+            contentTypesBlob.push(contentTypeElement);
+
+            //alway set
+            g_form.addOption('content_type', contentTypeElement.Name, contentTypeElement.Name);
+
+            if (currValue != null) {
+                if (currValue != contentTypeElement.Name) {
+                    //g_form.addOption('content_type', contentTypeElement.Name, contentTypeElement.Name);
+                }
+                else {
+                    // g_form.addOption('content_type', contentTypeElement.Name, contentTypeElement.Name);
+                    g_form.setValue('content_type', currValue);
+                }
+            }
+            else {
+                //null, never set before
+                //g_form.addOption('content_type', contentTypeElement.Name, contentTypeElement.Name);
+            }
+
+
+        }
+
+        var ga = new GlideAjax('ContentTypeAjaxService');
+        ga.addParam('sysparm_name', 'insertContentTypes');
+
+        ga.addParam('sysparm_libSysId', currentLibraryId);
+        ga.addParam('sysparm_content_type_blob', JSON.stringify(contentTypesBlob, null, 2));
+
+        ga.getXML(processGetContentTypeAjaxResponse);
+
+    }
+}
+
+function processGetContentTypeAjaxResponse(validationResponse) {
+    var answer = validationResponse.responseXML.documentElement.getAttribute("answer");
+    g_form.clearMessages();
+    g_form.addInfoMessage(" " + answer);
+}
+
+function populateDropdownFromJSONBlob(g_form, blob_field, dropdown_field, json_field) {
+    // var lt_blob = g_form.getValue('sp_list_blob');
+
+    // if (lt_blob) {
+    //    var jsonLtBlob = JSON.parse(lt_blob);
+
+    //    for (var key in jsonLtBlob) {
+    //       if (jsonLtBlob.hasOwnProperty(key)) {
+    //          var obj = jsonLtBlob[key];
+    //          g_form.addOption('list_title', obj.Name, obj.Name);
+    //       }
+    //    }
+    // }
+    var blob = g_form.getValue(blob_field);
+
+    if (blob) {
+        var jsonBlob = JSON.parse(blob);
+
+        for (var key in jsonBlob) {
+            if (jsonBlob.hasOwnProperty(key)) {
+                var obj = jsonBlob[key];
+
+                var f = "Name";
+
+                if (json_field) {
+                    f = json_field;
+                }
+
+                g_form.addOption(dropdown_field, obj[f], obj[f]);
+            }
+        }
+    }
+
+}
+
+//called by UI Macro, CommonMacro
+function renderIframe(anchor, document) {
+
+    debugger;
+    // do not remove this empty script,  it is used to find the formatter.
+    //var anchor = "${jvar_var_anchor}";
+
+    var var_anchor = $j("#" + anchor);
+
+    var closeSpan = var_anchor.closest("span")[0];
+    var tabName = closeSpan.children[0].children[0].innerText;
+    var sectionId = closeSpan.id;
+    var sectionSysId = sectionId.substring(8);
+
+    //alert('DocInt Common Macro, Section ' + tabName + " section id " + sectionSysId );
+
+    var ga = new GlideAjax('PlatIntAjaxService');
+    ga.addParam('sysparm_name', 'getSectionRegistrationInfo');
+    ga.addParam('sysparm_form_section_sysid', sectionSysId);
+
+    ga.getXMLWait();
+    var configItems = ga.getAnswer();
+
+    //alert(configItems);
+    var itemObj = JSON.parse(configItems);
+
+    // <!-- platIntItem.name = ga.getDisplayValue('display_name');
+    //    platIntItem.widget_name = ga.getValue('docintegrator_widget');
+    //     platIntItem.view_id = ga.getValue('docintegrator_view');
+    //     platIntItem.active = ga.getValue('active'); -->
+
+    var platIntItem = itemObj[0];
+    //alert(platIntItem.widget_name);
+
+    var isActive = (platIntItem.active == 1);
+
+    var target = anchor + "_iframe1";
+
+    var widget = platIntItem.widget_name;
+    var view_id = platIntItem.view_id;
+    var page_name = platIntItem.page;
+
+    var timeout_time = 1000;
+
+    var parentURL;
+    var table;
+    var sys_id;
+
+    parentURL = location.href;
+
+    var url = new URL(parentURL);
+    sys_id = url.searchParams.get('sys_id') || '';
+    table = url.searchParams.get('sysparm_record_target') || '';
+
+    var defaultPortal = "docint_pi_portal";
+
+    if (widget == "list_view_widget") {
+        var map_sys_id;
+
+        var timeout = setTimeout(function () {
+
+            var iframeElement = document.getElementById(target);
+
+            //iframeElement.src="/rc?id=listview_integration&amp;sysparm_domain_restore=false&amp;sysparm_stack=no";
+            
+            var page = "listview_integration";
+            
+            if(page_name) {
+                page = page_name;
+            }
+            
+            //var src_prefix = "/discoverdocintegratorportal?id=" + page + "&native=true&sysparm_domain_restore=false&sysparm_stack=no";
+            var src_prefix = "/" + defaultPortal + "?id=" + page + "&native=true&sysparm_domain_restore=false&sysparm_stack=no";
+
+            if (isActive) {
+                iframeElement.src = src_prefix + "&table=" + table + "&map_sys_id=" + sys_id + "&vw=" + view_id;
+            }
+            else {
+                iframeElement.style.display = "none";
+            }
+
+        }, timeout_time);
+    }
+    else if (widget == "search_page_widget") {
+        var recTarget;
+        var query;
+        var sys_id;
+
+        var search_source = platIntItem.search_source;
+        var search_field = platIntItem.search_field;
+
+        //Entering  Search Macro
+        var interval = setInterval(function () {
+            if (document.readyState === 'complete') {
+                debugger;
+                clearInterval(interval);
+
+                var iframeElement = document.getElementById(target);
+
+                var page = "search_integration";
+            
+                if(page_name) {
+                    page = page_name;
+                }
+
+                //var src_prefix = "/discoverdocintegratorportal?id=search_native&native=true&t=" + search_source + "&q=";
+                var src_prefix = "/" + defaultPortal + "?id=" +  page + "&native=true&t=" + search_source + "&q=";
+
+                if (isActive) {
+
+                    //query = document.getElementById(table + '.short_description').value;
+                    //
+
+                    query = document.getElementById(table + '.' + search_field).value;
+
+                    console.log("query: " + query);
+
+                    var appendStr = query + "&sys_id=" + sys_id + "&vw=" + view_id;;
+
+                    iframeElement.src = src_prefix + appendStr;
+                }
+                else {
+                    iframeElement.style.display = "none";
+                }
+            }
+        }, 1000);
+    }
+}
+
+const DOCINT_CONSTANT_PREV_KEY = "sn.library.form.list.title.prev";
+const DOCINT_CONSTANT_MSG_TEST_LIB_OK = "Test Library Succeeds!";
+
+//supported file format
+//https://docs.microsoft.com/en-us/officeonlineserver/office-online-server-overview
+const OWA_SUPPORTED_FILE_FORMATS = "pdf,doc,docx,dotx,dot,dotm,xls,xlsx,xlsm,xlm,xlsb,ppt,pptx,pps,ppsx,potx,pot,pptm,potm,ppsm";
+
