@@ -20,12 +20,13 @@ var DocIntADAL_DS = (function () {
             },
             'cacheLocation': 'localStorage',
             popUp: false,
-            displayCall: function (urlNavigate) {
-                var loginUrl = urlNavigate;
-                var actx = this;
+            //Custom PopUP Method
+           // displayCall: function (urlNavigate) {
+                //var loginUrl = urlNavigate;
+                //var actx = this;
                 //$sce.trustAsResourceUrl(loginUrl);
                 //$scope.url = loginUrl;
-                var popupWindow = window.open(loginUrl, "login", 'width=483, height=600');
+                //var popupWindow = window.open(loginUrl, "login", 'width=483, height=600');
 
                 //per cert.
                 //popupWindow.opener = null;
