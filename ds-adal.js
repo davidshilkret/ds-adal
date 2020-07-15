@@ -269,6 +269,7 @@ function validateLibrary(g_form) {
     var connectionType = g_scratchpad.conn_type;
 
     debugger;
+    alert("Hello from ds adal");
 
     if (connectionType != 'o365') {
 
