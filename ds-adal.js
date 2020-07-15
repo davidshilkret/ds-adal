@@ -19,17 +19,17 @@ var DocIntADAL_DS = (function () {
                 'sharePointUri': spUri
             },
             'cacheLocation': 'localStorage',
-            //popUp: false,
+            popUp: true,
             //Custom PopUP Method
            /* displayCall: function (urlNavigate) {
-                //var loginUrl = urlNavigate;
-                //var actx = this;
-                //$sce.trustAsResourceUrl(loginUrl);
-                //$scope.url = loginUrl;
-                //var popupWindow = window.open(loginUrl, "login", 'width=483, height=600');
+                var loginUrl = urlNavigate;
+                var actx = this;
+                $sce.trustAsResourceUrl(loginUrl);
+                $scope.url = loginUrl;
+                var popupWindow = window.open(loginUrl, "login", 'width=483, height=600');
 
                 //per cert.
-                //popupWindow.opener = null;
+                popupWindow.opener = null;
                 //roll back
                 if (popupWindow && popupWindow.focus)
                     popupWindow.focus();
