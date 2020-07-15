@@ -21,7 +21,7 @@ var DocIntADAL_DS = (function () {
             'cacheLocation': 'localStorage',
             popUp: true,
             //Custom PopUP Method
-           /* displayCall: function (urlNavigate) {
+           displayCall: function (urlNavigate) {
                 var loginUrl = urlNavigate;
                 var actx = this;
                 $sce.trustAsResourceUrl(loginUrl);
@@ -71,7 +71,7 @@ var DocIntADAL_DS = (function () {
                     }
                 }, 20);
             }
-        };*/
+        };
 
         if (DocIntADAL_DS.prototype._instance) {
             return DocIntADAL_DS.prototype._instance;
