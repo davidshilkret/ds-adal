@@ -19,9 +19,9 @@ var DocIntADAL_DS = (function () {
                 'sharePointUri': spUri
             },
             'cacheLocation': 'localStorage',
-            popUp: false,
+            //popUp: false,
             //Custom PopUP Method
-           // displayCall: function (urlNavigate) {
+           /* displayCall: function (urlNavigate) {
                 //var loginUrl = urlNavigate;
                 //var actx = this;
                 //$sce.trustAsResourceUrl(loginUrl);
@@ -82,7 +82,7 @@ var DocIntADAL_DS = (function () {
         DocIntADAL_DS.prototype._instance = this;
 
         return DocIntADAL_DS.prototype._instance;
-    };
+    }; */
 
     DocIntADAL_DS.prototype.context = new function () {
         return DocIntADAL_DS.prototype._instance;
