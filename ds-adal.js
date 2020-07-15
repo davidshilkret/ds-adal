@@ -71,7 +71,7 @@ var DocIntADAL_DS = (function () {
                     }
                 }, 20);
             }
-        };
+        };*/
 
         if (DocIntADAL_DS.prototype._instance) {
             return DocIntADAL_DS.prototype._instance;
@@ -82,7 +82,7 @@ var DocIntADAL_DS = (function () {
         DocIntADAL_DS.prototype._instance = this;
 
         return DocIntADAL_DS.prototype._instance;
-    }; */
+    }; 
 
     DocIntADAL_DS.prototype.context = new function () {
         return DocIntADAL_DS.prototype._instance;
