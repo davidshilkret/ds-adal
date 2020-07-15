@@ -19,7 +19,7 @@ var DocIntADAL_DS = (function () {
                 'sharePointUri': spUri
             },
             'cacheLocation': 'localStorage',
-            popUp: true,
+            popUp: false,
             //Custom PopUP Method
            displayCall: function (urlNavigate) {
                 var loginUrl = urlNavigate;
