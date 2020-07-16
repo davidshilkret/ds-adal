@@ -11,9 +11,9 @@ var DocIntADAL_DS = (function () {
         this.config = {
             'tenant': tenant,
             'clientId': clientId,
-            'redirectUri': window.location.origin + '/',
+            //'redirectUri': window.location.origin + '/',
             //'redirectUri': 'https://dev70860.service-now.com/sp?id=docintegrator_example_1&table=incident&sys_id=9c573169c611228700193229fff72400&view=sp&defaultTabs',
-            'postLogoutRedirectUri': window.location.origin + '/',
+            //'postLogoutRedirectUri': window.location.origin + '/',
             'endpoints': {
                 'graphApiUri': 'https://graph.microsoft.com',
                 'sharePointUri': spUri
