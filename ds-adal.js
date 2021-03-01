@@ -15,7 +15,7 @@ var DocIntADAL_DS = (function () {
             //'redirectUri': 'https://dev70860.service-now.com/sp?id=docintegrator_example_1&table=incident&sys_id=9c573169c611228700193229fff72400&view=sp&defaultTabs',
             //'postLogoutRedirectUri': window.location.origin + '/',
             'endpoints': {
-                'graphApiUri': 'https://graph.microsoft.com',
+                //'graphApiUri': 'https://graph.microsoft.com',
                 'sharePointUri': spUri
             },
             'cacheLocation': 'localStorage',
